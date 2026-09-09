@@ -31,11 +31,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # vendored lib/ + benchmark_extraction.py
 
 from lib.loaders import load_mex_matrix, load_guide_pair_mapping  # noqa: E402
+from lib.concentration import signal_concentration_metrics  # noqa: E402
 from benchmark_extraction import (  # noqa: E402
     _load_ref_for_extraction,
     _compute_pseudobulk_metrics,
     _compute_percell_metrics,
 )
+
+
+# Retained inside the vendored evaluator for historical parity, but no longer
+# exposed as part of the Omnibenchmark extraction metric system.
+_REMOVED_EXTRACTION_METRICS = frozenset({
+    "per_cell_guide_recall_median",
+    "per_cell_guide_recall_full",
+    "n_cells_for_recall",
+    "expected_guides_per_cell",
+})
 
 
 def _mex_dir_from_inputs(matrix, barcodes, features, workdir):
@@ -100,10 +111,14 @@ def main():
             pipe_mat, pipe_barcodes, pipe_features,
             ref_mat, ref_barcodes, ref_bc_index,
             ref_feature_ids, sg2pair, args.guide_mode)
+        concentration = signal_concentration_metrics(pipe_mat)
 
-    metrics = {**pb, **pc}
+    metrics = {**pb, **pc, **concentration}
     out = os.path.join(args.output_dir, f"{args.name}.scores.json")
-    clean = {k: v for k, v in metrics.items() if not k.startswith("_")}
+    clean = {
+        k: v for k, v in metrics.items()
+        if not k.startswith("_") and k not in _REMOVED_EXTRACTION_METRICS
+    }
     with open(out, "w") as f:
         json.dump(clean, f, indent=2, default=str)
     print("guide_extraction_metrics: wrote", os.path.basename(out))
